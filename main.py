@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 
-import chromedriver_autoinstaller
 import telegram
 from dotenv import load_dotenv
 from selenium import webdriver
@@ -10,6 +9,8 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service as ChromeService
 
 load_dotenv()
 URL = "https://agendamentosonline.mne.gov.pt/AgendamentosOnline/app/scheduleAppointmentForm.jsf"
@@ -17,7 +18,6 @@ SEARCH_TEXT = 'De momento não existem vagas disponíveis, por favor tente mais 
 
 
 def start_webdriver(headless):
-    chromedriver_autoinstaller.install()
     chrome_options = Options()
     if headless:
         chrome_options.add_argument("--headless")
@@ -37,15 +37,15 @@ def start_webdriver(headless):
         chrome_options.add_argument('--disable-software-rasterizer')
         chrome_options.add_experimental_option("useAutomationExtension", False)
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    return webdriver.Chrome(options=chrome_options)
+    return webdriver.Chrome(options=chrome_options,service=ChromeService(ChromeDriverManager().install()))
 
 
-def appointment_is_available(browser):
+def appointment_is_available(browser_inst):
     try:
-        browser.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        # browser_inst.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         # Wait for the element to be clickable and then click it
-        wait = WebDriverWait(browser, 10)
-        # browser.save_screenshot("screenshot.png")
+        wait = WebDriverWait(browser_inst, 15)
+        browser_inst.save_screenshot("screenshot.png")
         # Fill ID with keyboard input
         input_element = wait.until(EC.element_to_be_clickable((By.ID, "scheduleForm:tabViewId:ccnum")))
         # Fill the input element with the desired value
@@ -68,7 +68,7 @@ def appointment_is_available(browser):
         option_element = wait.until(EC.visibility_of_element_located((By.XPATH, option_xpath)))
         option_element.click()
         # Wait for the dropdown to be clickable and click it
-        wait = WebDriverWait(browser, 10)
+        wait = WebDriverWait(browser_inst, 10)
         dropdown_trigger = wait.until(EC.element_to_be_clickable((By.ID, "scheduleForm:categato_label")))
         dropdown_trigger.click()
         # Wait for the specific option to be visible and clickable
@@ -86,9 +86,10 @@ def appointment_is_available(browser):
         calendarize_button = wait.until(EC.element_to_be_clickable((By.ID, "scheduleForm:dataTableListaAtos:0:bCal")))
         calendarize_button.click()
         text_xpath = f"//*[contains(text(), '{SEARCH_TEXT}')]"
-        text_element = wait.until(EC.visibility_of_element_located((By.XPATH, text_xpath)))
+        text_element = wait.until(EC.visibility_of_element_located((By.XPATH, text_xpath))).text
         # Read the text from the element
-        return SEARCH_TEXT != text_element.text
+
+        return SEARCH_TEXT != text_element
     except Exception as e:
         logging.error(e)
         return True
@@ -108,10 +109,10 @@ if __name__ == '__main__':
                 send_telegram_message(f"Appointment is available! or something went wrong \n {URL}", os.getenv("TELEGRAM_TOKEN"),
                                       os.getenv("TELEGRAM_GROUP")))
         else:
-            if os.getenv("INFORM_ON_MISSING"):
+            if os.getenv("INFORM_ON_MISSING", False):
                 asyncio.run(send_telegram_message("No appointment available", os.getenv("TELEGRAM_TOKEN"),
                                                   os.getenv("TELEGRAM_GROUP")))
+        browser.quit()
     except Exception as main_exception:
         logging.error(main_exception)
-    finally:
-        browser.quit()
+
