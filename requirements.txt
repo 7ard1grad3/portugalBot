@@ -1,0 +1,5 @@
+selenium~=4.15.2
+chromedriver-autoinstaller
+python-telegram-bot==20.6
+asyncio
+python-dotenv
